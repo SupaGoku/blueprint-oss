@@ -1,0 +1,193 @@
+---
+description: Rules to finish off and deliver to user set of tasks that have been completed using blueprint
+globs:
+alwaysApply: false
+version: 1.0
+encoding: UTF-8
+---
+
+# Task Execution Rules
+
+## Overview
+
+Follow these steps to mark your progress updates, create a recap, and deliver the final report to the user.
+
+<pre_flight_check>
+EXECUTE: @.blueprint-oss/instructions/meta/pre-flight.md
+</pre_flight_check>
+
+<process_flow>
+
+<step number="1" name="code_quality_verification">
+
+### Step 1: Run Language-Specific Quality Checks
+
+Run the verification workflow as defined in @.blueprint-oss/standards/code-style/[language]-style.md to ensure the entire codebase meets quality standards and fix any issues until all checks pass.
+
+<instructions>
+  ACTION: Execute language-specific verification workflow
+  REFERENCE: @.blueprint-oss/standards/code-style/[language]-style.md
+  WAIT: For verification results
+  PROCESS: Fix any reported warnings or errors
+  REPEAT: Until all checks pass
+</instructions>
+
+<quality_verification>
+<order> 1. Run language-specific checks and workflow 2. Fix any issues or warnings
+</order>
+<requirement>No errors, no warnings</requirement>
+</quality_verification>
+
+<failure_handling>
+<action>troubleshoot and fix</action>
+<priority>before proceeding</priority>
+</failure_handling>
+
+</step>
+
+<step number="2" subagent="project-manager" name="tasks_list_check">
+
+### Step 2: Tasks Completion Verification
+
+Use the project-manager subagent to read the current spec's tasks.md file and verify that all tasks have been properly marked as complete with [x] or documented with blockers.
+
+<instructions>
+  ACTION: Use project-manager subagent
+  REQUEST: "Verify that all tasks have been marked with their outcome:
+            - Read [SPEC_FOLDER_PATH]/tasks.md
+            - Check all tasks are marked complete with [x] or (in rare cases) a documented blocking issue."
+  WAIT: For task verification analysis
+  PROCESS: Update task status as needed
+</instructions>
+
+</step>
+
+<step number="3" subagent="project-manager" name="roadmap_progress_check">
+
+### Step 3: Roadmap Progress Update (conditional)
+
+Use the project-manager subagent to read @.blueprint-oss/product/roadmap.md and mark roadmap items as complete with [x] ONLY IF the executed tasks have completed any roadmap item(s) and the spec completes that item.
+
+<conditional_execution>
+<preliminary_check>
+EVALUATE: Did executed tasks complete any roadmap item(s)?
+IF NO:
+SKIP this entire step
+PROCEED to step 6
+IF YES:
+CONTINUE with roadmap check
+</preliminary_check>
+</conditional_execution>
+
+<roadmap_criteria>
+<update_when> - spec fully implements roadmap feature - all related tasks completed
+</update_when>
+</roadmap_criteria>
+
+<instructions>
+  ACTION: First evaluate if roadmap check is needed
+      SKIP: If tasks clearly don't complete roadmap items
+  EVALUATE: If current spec completes roadmap goals
+  UPDATE: Mark roadmap items complete with [x] if applicable
+</instructions>
+
+</step>
+
+<step number="4" subagent="project-manager" name="document_recap">
+
+### Step 4: Create Recap Document
+
+Use the project-manager subagent to create a recap document in .blueprint-oss/recaps/ folder that summarizes what was built for this spec.
+
+<instructions>
+  ACTION: Use project-manager subagent
+  REQUEST: "Create recap document for current spec:
+            - Create file: .blueprint-oss/recaps/[SPEC_FOLDER_NAME].md
+            - Use template format with completed features summary
+            - Include context from spec-lite.md
+            - Document: [SPEC_FOLDER_PATH]"
+  WAIT: For recap document creation
+  PROCESS: Verify file is created with proper content
+</instructions>
+
+<recap_template>
+
+# [yyyy-mm-dd] Recap: Feature Name
+
+This recaps what was built for the spec documented at .blueprint-oss/specs/current/[spec-folder-name]/spec.md.
+
+## Recap
+
+[1 paragraph summary plus short bullet list of what was completed]
+
+## Context
+
+[Copy the summary found in spec-lite.md to provide concise context of what the initial goal for this spec was]
+</recap_template>
+
+<file_creation>
+<location>.blueprint-oss/recaps/</location>
+<naming>[SPEC_FOLDER_NAME].md</naming>
+<format>markdown with yaml frontmatter if needed</format>
+</file_creation>
+
+<content_requirements>
+
+  <summary>1 paragraph plus bullet points</summary>
+  <context>from spec-lite.md summary</context>
+  <reference>link to original spec</reference>
+</content_requirements>
+
+</step>
+
+<step number="5" subagent="project-manager" name="completion_summary">
+
+### Step 5: Completion Summary
+
+Use the project-manager subagent to create a structured summary message with emojis showing what was done, any issues, and PR link.
+
+<summary_template>
+
+## ✅ What's been done
+
+1. **[FEATURE_1]** - [ONE_SENTENCE_DESCRIPTION]
+2. **[FEATURE_2]** - [ONE_SENTENCE_DESCRIPTION]
+
+## ⚠️ Issues encountered
+
+[ONLY_IF_APPLICABLE]
+
+- **[ISSUE_1]** - [DESCRIPTION_AND_REASON]
+
+</step>
+
+<step number="6" subagent="project-manager" name="completion_notification">
+
+### Step 6: Task Completion Notification
+
+Use the project-manager subagent to play a system sound to alert the user that tasks are complete.
+
+<notification_command>
+afplay /System/Library/Sounds/Glass.aiff
+</notification_command>
+
+<instructions>
+  ACTION: Play completion sound
+  PURPOSE: Alert user that task is complete
+</instructions>
+
+</step>
+
+<step number="7" name="move spec to done">
+
+### Step 7: Move Complete Folder
+
+Move the completed spec dir to @.blueprint-oss/specs/done
+
+</step>
+
+</process_flow>
+
+<post_flight_check>
+EXECUTE: @.blueprint-oss/instructions/meta/post-flight.md
+</post_flight_check>

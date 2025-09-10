@@ -1,0 +1,26 @@
+# blueprint Configuration
+
+blueprint_version: 1.5.0 # Adds Codex prompts support
+
+agents:
+  claude_code:
+    enabled: true
+  cursor:
+    enabled: true
+  codex:
+    enabled: true
+
+project_types:
+  generic:
+    instructions: ~/.blueprint-oss/instructions
+    standards: ~/.blueprint-oss/standards
+
+  # type_a:
+  #   instructions: ~/.blueprint-oss/project_types/type_a/instructions
+  #   standards: ~/.blueprint-oss/project_types/type_a/standards
+
+  # type_b:
+  #   instructions: ~/.blueprint-oss/project_types/type_b/instructions
+  #   standards: ~/.blueprint-oss/project_types/type_b/standards
+
+default_project_type: generic
