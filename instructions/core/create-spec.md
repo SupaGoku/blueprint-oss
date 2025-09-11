@@ -397,6 +397,52 @@ When you're ready, run the /create-tasks command to have me build the tasks chec
 
 </step>
 
+<step number="12" subagent="project-manager" name="roadmap_update">
+
+### Step 12: Update Roadmap with New Spec
+
+Use the project-manager subagent to update @.blueprint-oss/product/roadmap.md by adding the newly created spec as a roadmap item if it represents a new feature or enhancement.
+
+<conditional_execution>
+<preliminary_check>
+EVALUATE: Does this spec represent a roadmap-worthy feature?
+IF NO (bug fix, minor enhancement, internal refactor):
+SKIP this entire step
+PROCEED to end
+IF YES (new feature, major enhancement, user-facing improvement):
+CONTINUE with roadmap update
+</preliminary_check>
+</conditional_execution>
+
+<roadmap_criteria>
+<add_when>
+- spec introduces new user-facing functionality
+- spec represents significant feature enhancement
+- spec aligns with product goals and mission
+</add_when>
+<skip_when>
+- minor bug fixes
+- internal code refactoring
+- small technical improvements
+</skip_when>
+</roadmap_criteria>
+
+<instructions>
+ACTION: Use project-manager subagent
+REQUEST: "Update roadmap with new spec:
+          - Read @.blueprint-oss/product/roadmap.md
+          - Add unchecked [ ] item for this spec if it's a roadmap-worthy feature
+          - Use format: [ ] [SPEC_NAME] - [ONE_SENTENCE_DESCRIPTION]
+          - Place in appropriate priority section"
+WAIT: For roadmap update completion
+</instructions>
+
+<roadmap_item_format>
+[ ] [SPEC_NAME] - [ONE_SENTENCE_DESCRIPTION_FROM_OVERVIEW]
+</roadmap_item_format>
+
+</step>
+
 </process_flow>
 
 <post_flight_check>
