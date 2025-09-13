@@ -25,17 +25,28 @@ EXECUTE: @.blueprint-oss/instructions/meta/pre-flight.md
 Use the context-fetcher subagent to list available specs and prompt user for selection. Never auto-select - always wait for explicit user choice.
 
 <selection_requirements>
-<list_specs>Display all specs in .blueprint-oss/specs/current/ as numbered list</list_specs>
+<list_specs>
+Display all specs from both .blueprint-oss/specs/priority/ and .blueprint-oss/specs/current/ as numbered lists:
+- First list priority specs (if any exist)
+- Then list current specs
+- Number continuously across both lists
+</list_specs>
 <user_prompt>"Which spec would you like to revise? Please provide the spec folder name or number from the list above."</user_prompt>
 <wait_for>explicit user selection</wait_for>
-<validate>confirm spec exists before proceeding</validate>
+<validate>confirm spec exists in either priority or current folder before proceeding</validate>
 </selection_requirements>
 
 <example_interaction>
 Available specs:
-1. 01-user-authentication-2025-01-15
-2. 02-payment-processing-2025-01-20  
-3. 03-notification-system-2025-01-25
+
+Priority specs:
+1. 00-critical-security-fix-2025-01-10
+2. 01-urgent-performance-issue-2025-01-12
+
+Current specs:
+3. 01-user-authentication-2025-01-15
+4. 02-payment-processing-2025-01-20
+5. 03-notification-system-2025-01-25
 
 Which spec would you like to revise? Please provide the spec folder name or number from the list above.
 </example_interaction>
