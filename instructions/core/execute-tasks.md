@@ -38,9 +38,9 @@ Once you're identified the spec has tasks, confirm with the user.
 
 Execute tasks for a given spec following three distinct phases:
 
-1. Pre-execution setup (Steps 1-3)
-2. Task execution loop (Step 4)
-3. Post-execution tasks (Step 5)
+1. Pre-execution setup (Steps 1–2)
+2. Task execution + Post-execution (Steps 3–4)
+3. Verification loop (Step 5)
 
 **IMPORTANT**: All three phases MUST be completed. Do not stop after phase 2.
 
@@ -94,7 +94,7 @@ Use the context-fetcher subagent to gather minimal context for task understandin
 
 </step>
 
-## Phase 2: Task Execution Loop
+## Phase 2: Task Execution + Post-Execution
 
 <step number="3" name="task_execution_loop">
 
@@ -113,7 +113,7 @@ WAIT for task completion
 UPDATE tasks.md status
 END FOR
 
-**IMPORTANT**: After loop completes, CONTINUE to Phase 3 (Step 5). Do not stop here.
+**IMPORTANT**: After this loop completes, CONTINUE to Step 4 (Post-Execution Tasks). Do not stop here.
 </execution_flow>
 
 <loop_logic>
@@ -139,20 +139,18 @@ CONTINUE with next task
   UPDATE: Task status after each completion
   VERIFY: All tasks complete before proceeding
   HANDLE: Blocking issues appropriately
-  **IMPORTANT**: When all tasks complete, proceed to Step 5
+  **IMPORTANT**: When all tasks complete, proceed to Step 4 (Post-Execution Tasks)
 </instructions>
 
 </step>
 
-## Phase 3: Post-Execution Tasks
-
 <step number="4" name="post_execution_tasks">
 
-### Step 4: Run the task completion steps
+### Step 4: Post-Execution Tasks
 
-**CRITICAL**: This step MUST be executed after all tasks are implemented. Do not end the process without completing this phase.
+**CRITICAL**: Run these preparatory wrap-up steps before entering the verification loop.
 
-After all tasks in tasks.md have been implemented, use @.blueprint-oss/instructions/core/post-execution-tasks.md to run our series of steps we always run when finishing and delivering a new feature.
+After all tasks in tasks.md have been implemented, use @.blueprint-oss/instructions/core/post-execution-tasks.md to run our standard completion steps for a new feature.
 
 <instructions>
   LOAD: @.blueprint-oss/instructions/core/post-execution-tasks.md once
@@ -165,6 +163,65 @@ After all tasks in tasks.md have been implemented, use @.blueprint-oss/instructi
     - Generating completion summary
     - Playing notification sound
 </instructions>
+
+</step>
+
+## Phase 3: Verification Loop
+
+<step number="5" name="verification_loop">
+
+### Step 5: Verification Loop (Researcher Subagents)
+
+Run a verification pass using researcher subagent(s) with a clean slate: provide ONLY the completed spec and current tasks.md as initial context. The subagent(s) must determine if tasks marked complete are truly complete, with no TODOs, stubs, dead code, or missing behaviors. Any missed implementations must be turned into new top‑level tasks (with detailed subtasks and code references) appended to tasks.md by the subagent(s). The only response to the primary agent is a binary decision: MORE_WORK or FEATURE_COMPLETE.
+
+<agent_selection>
+- Use `frontend-researcher` when scope involves UI/components/routes/state/style/accessibility.
+- Use `backend-researcher` when scope involves APIs/services/workers/db/auth/integrations.
+- Use BOTH when scope spans full‑stack or uncertain.
+</agent_selection>
+
+<present_to_user>
+- Selected agent(s): frontend-researcher, backend-researcher, or both
+- Rationale for selection based on spec scope
+</present_to_user>
+
+<initial_context>
+- `@.blueprint-oss/specs/[...]/spec.md` (required)
+- `@.blueprint-oss/specs/[...]/tasks.md` (required)
+- No other files are preloaded. The subagent must discover and read repo code as needed.
+</initial_context>
+
+<constraints>
+- Subagent(s) MUST NOT modify code; documentation/tasks only.
+- Findings must include concrete evidence: file paths, line ranges, routes/selectors, or UI states.
+- Each missed item must be added as a new top‑level task with detailed subtasks and acceptance criteria matching our tasks.md style.
+</constraints>
+
+<subagent_outputs>
+- Report: concise summary of verification scope and confidence.
+- New tasks: appended directly to tasks.md by the subagent(s).
+- Primary response: EXACTLY one of: `MORE_WORK` or `FEATURE_COMPLETE`.
+</subagent_outputs>
+
+<deliverables>
+- EDIT: `@.blueprint-oss/specs/[...]/tasks.md` — append new tasks at end; DO NOT reorder existing items.
+</deliverables>
+
+<step number="5a" subagent="backend-researcher" name="run_backend_verification_if_selected">
+RUN ONLY IF backend-researcher was selected.
+</step>
+
+<step number="5b" subagent="frontend-researcher" name="run_frontend_verification_if_selected">
+RUN ONLY IF frontend-researcher was selected.
+</step>
+
+<verification_flow>
+IF subagent(s) return `MORE_WORK`:
+  RECURSE to Step 3 (Task Execution Loop)
+  THEN run Step 4 (Post-Execution Tasks) before re-entering Step 5
+ELSE IF `FEATURE_COMPLETE`:
+  PROCEED to Post-Flight Checks
+</verification_flow>
 
 </step>
 
