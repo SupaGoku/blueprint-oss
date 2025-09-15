@@ -12,6 +12,10 @@ encoding: UTF-8
 
 With the user's approval, proceed to creating a tasks list based on the current feature spec.
 
+Explicit context requirement:
+
+- Always read and load the complete contents of the selected spec folder into context, including every file and all subfolders (notably `sub-specs/`). Do not assume a fixed set of files; different specs may include additional documents, schemas, mocks, or checklists.
+
 Priority override (priority 00):
 
 - First, check @.blueprint-oss/specs/priority for any spec folders. If one or more exist, they take absolute priority (treat as priority "00").
@@ -37,6 +41,17 @@ EXECUTE: @.blueprint-oss/instructions/meta/pre-flight.md
 ### Step 1: Create tasks.md
 
 Use the file-creator subagent to create file: tasks.md inside of the current feature's spec folder.
+
+<context_intake>
+MUST load full spec context before drafting tasks:
+
+- Locate the selected spec directory under `@.blueprint-oss/specs/{priority|current}/[SPEC_DIRNAME]`.
+- Recursively read ALL files and folders within this spec directory, including `sub-specs/` and any nested directories.
+- Include all text-based files (e.g., `.md`, `.txt`, `.yml`, `.yaml`, `.json`, `.graphql`, `.proto`, `.sql`, `.http`, `.xml`, `.toml`, `.ini`, `.csv`, `.tsv`, `.svg`, source code snippets referenced by the spec).
+- For binary or very large files, capture filename, relative path, and any embedded/adjacent textual description; summarize intent and link path in the task rationale.
+- Do not skip optional or unfamiliar files; skim and extract any constraints, acceptance criteria, interfaces, routes, data models, and edge cases.
+- If any referenced file paths in the spec are missing, STOP and request clarification from the user before proceeding.
+</context_intake>
 
 <file_template>
 
