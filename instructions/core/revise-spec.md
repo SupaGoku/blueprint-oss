@@ -18,25 +18,46 @@ EXECUTE: @.blueprint-oss/instructions/meta/pre-flight.md
 
 <process_flow>
 
-<step number="1" subagent="context-fetcher" name="spec_selection">
+<step number="1" subagent="context-fetcher" name="spec_selection_or_acceptance">
 
-### Step 1: Spec Selection
+### Step 1: Spec Acceptance or Selection
 
-Use the context-fetcher subagent to list available specs and prompt user for selection. Never auto-select - always wait for explicit user choice.
+Prefer an explicitly supplied spec path. Only enumerate if no spec was provided or it cannot be validated.
 
-<selection_requirements>
+<acceptance_flow>
+<explicit_input>
+- If `selected_spec` is present in context (e.g., from create-spec handoff), validate that it points to an existing spec folder under either `.blueprint-oss/specs/current/` or `.blueprint-oss/specs/priority/`.
+- If valid, ACCEPT and proceed directly to Step 2 without listing specs.
+</explicit_input>
+<context_derivation>
+- If `selected_spec` is absent, attempt to derive from recent context (e.g., the most recently created spec path produced by create-spec or create-priority-item execution).
+- Validate existence; if valid, ACCEPT and proceed to Step 2.
+</context_derivation>
+<fallback_enumeration>
+- If no valid path is supplied or derivable, list available specs and prompt the user to choose. Never auto-select in this fallback.
+</fallback_enumeration>
+</acceptance_flow>
+
+<fallback_listing_requirements>
 <list_specs>
-Display all specs from both .blueprint-oss/specs/priority/ and .blueprint-oss/specs/current/ as numbered lists:
+Display all specs from both `.blueprint-oss/specs/priority/` and `.blueprint-oss/specs/current/` as numbered lists:
 - First list priority specs (if any exist)
 - Then list current specs
 - Number continuously across both lists
 </list_specs>
-<user_prompt>"Which spec would you like to revise? Please provide the spec folder name or number from the list above."</user_prompt>
+<user_prompt>"Which spec would you like to revise? Provide the spec folder name or number from the list above."</user_prompt>
 <wait_for>explicit user selection</wait_for>
-<validate>confirm spec exists in either priority or current folder before proceeding</validate>
-</selection_requirements>
+<validate>confirm the selected spec exists before proceeding</validate>
+</fallback_listing_requirements>
 
 <example_interaction>
+Case A (explicit):
+- Input provided: `selected_spec=@.blueprint-oss/specs/current/02-payment-processing-2025-01-20/` → Proceed.
+
+Case B (derived):
+- Recently created spec detected in context → Validate path → Proceed.
+
+Case C (fallback listing):
 Available specs:
 
 Priority specs:
@@ -48,7 +69,7 @@ Current specs:
 4. 02-payment-processing-2025-01-20
 5. 03-notification-system-2025-01-25
 
-Which spec would you like to revise? Please provide the spec folder name or number from the list above.
+Which spec would you like to revise? Provide the spec folder name or number from the list above.
 </example_interaction>
 
 </step>
@@ -276,4 +297,3 @@ When ready, you can:
 <post_flight_check>
 EXECUTE: @.blueprint-oss/instructions/meta/post-flight.md
 </post_flight_check>
-

@@ -376,30 +376,9 @@ SKIP this_step
 
 </step>
 
-<step number="11" name="user_review">
+<step number="11" subagent="project-manager" name="roadmap_update">
 
-### Step 11: User Review
-
-Request user review of spec.md and all sub-specs files, waiting for approval or revision requests.
-
-<review_request>
-I've created the spec documentation:
-
-- Spec Requirements: @.blueprint-oss/specs/current/[PRIORITY-IN-SPEC-QUEUE]-spec-name-YYYY-MM-DD//spec.md
-- Spec Summary: @.blueprint-oss/specs/current/[PRIORITY-IN-SPEC-QUEUE]-spec-name-YYYY-MM-DD//spec-lite.md
-- Technical Spec: @.blueprint-oss/specs/current/[PRIORITY-IN-SPEC-QUEUE]-spec-name-YYYY-MM-DD//sub-specs/technical-spec.md
-  [LIST_OTHER_CREATED_SPECS]
-
-Please review and let me know if any changes are needed.
-
-When you're ready, run the /create-tasks command to have me build the tasks checklist from this spec.
-</review_request>
-
-</step>
-
-<step number="12" subagent="project-manager" name="roadmap_update">
-
-### Step 12: Update Roadmap with New Spec
+### Step 11: Update Roadmap with New Spec
 
 Use the project-manager subagent to update @.blueprint-oss/product/roadmap.md by adding the newly created spec as a roadmap item if it represents a new feature or enhancement.
 
@@ -440,6 +419,28 @@ WAIT: For roadmap update completion
 <roadmap_item_format>
 [ ] [SPEC_NAME] - [ONE_SENTENCE_DESCRIPTION_FROM_OVERVIEW]
 </roadmap_item_format>
+
+</step>
+
+<step number="12" subagent="backend-researcher|frontend-researcher" name="revise_spec_handoff">
+
+### Step 12: Revise This Spec (Handoff)
+
+Immediately run the revise-spec instruction against the spec created in Steps 5–10, passing the explicit spec folder path so enumeration is not required.
+
+<handoff>
+EXECUTE: @.blueprint-oss/instructions/core/revise-spec.md
+WITH:
+- selected_spec: [SPEC_FOLDER_PATH_CREATED_IN_STEP_5]
+</handoff>
+
+<notes>
+- Subagent selection:
+  - Use `frontend-researcher` if the spec primarily affects UI/UX, components, styling, or client-side behavior.
+  - Otherwise use `backend-researcher` (default) for server, API, data, or infrastructure-heavy specs.
+- Use the exact folder path created in Step 5 for this run (e.g., `.blueprint-oss/specs/current/...` or `.blueprint-oss/specs/priority/...`).
+- If this instruction was executed via a variant that changes the base folder (e.g., priority specs), pass that variant’s actual created path instead.
+</notes>
 
 </step>
 
