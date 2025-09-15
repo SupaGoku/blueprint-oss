@@ -168,7 +168,21 @@ echo -e "${BLUE}             Blueprint OSS Update Script${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo
 
-# Function to compare files using checksums
+# Robust hash of file contents
+hash_file() {
+    local file="$1"
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+    elif command -v md5 >/dev/null 2>&1; then
+        md5 -q "$file" 2>/dev/null
+    elif command -v md5sum >/dev/null 2>&1; then
+        md5sum "$file" 2>/dev/null | awk '{print $1}'
+    else
+        openssl dgst -sha256 "$file" 2>/dev/null | awk '{print $2}'
+    fi
+}
+
+# Function to compare files using content hash
 files_differ() {
     local source_file="$1"
     local target_file="$2"
@@ -177,16 +191,10 @@ files_differ() {
         return 0  # Target doesn't exist, files differ
     fi
 
-    # Use md5 on macOS, md5sum on Linux
-    if command -v md5 > /dev/null; then
-        local source_hash=$(md5 -q "$source_file" 2>/dev/null)
-        local target_hash=$(md5 -q "$target_file" 2>/dev/null)
-    else
-        local source_hash=$(md5sum "$source_file" 2>/dev/null | cut -d' ' -f1)
-        local target_hash=$(md5sum "$target_file" 2>/dev/null | cut -d' ' -f1)
-    fi
-
-    [[ "$source_hash" != "$target_hash" ]]
+    local h1 h2
+    h1=$(hash_file "$source_file")
+    h2=$(hash_file "$target_file")
+    [[ "$h1" != "$h2" ]]
 }
 
 # Function to prompt for update
@@ -211,8 +219,12 @@ prompt_update() {
             ;;
     esac
 
-    echo -en "${YELLOW}$prompt_msg [y/N]: ${NC}"
+    echo -en "${YELLOW}$prompt_msg [Y/n]: ${NC}"
     read -r response
+    # Default to Yes if empty
+    if [[ -z "$response" ]]; then
+        return 0
+    fi
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
@@ -223,7 +235,7 @@ show_diff() {
 
     if [[ "$VERBOSE" == true ]] && [[ -f "$target_file" ]]; then
         echo -e "${BLUE}Changes for $(basename "$source_file"):${NC}"
-        # Show first 10 lines of diff
+        # Show first 20 lines of diff
         diff -u "$target_file" "$source_file" 2>/dev/null | head -20 || true
         echo
     fi
@@ -240,18 +252,31 @@ update_file() {
         return 0
     fi
 
-    # Create backup if file exists
-    if [[ -f "$target_file" ]]; then
-        cp "$target_file" "${target_file}${BACKUP_SUFFIX}"
-        [[ "$VERBOSE" == true ]] && echo -e "${BLUE}  Backed up to: $(basename "${target_file}${BACKUP_SUFFIX}")${NC}"
-    fi
+    # No automatic backups; user-managed per guidelines
 
     # Create directory if needed
     mkdir -p "$(dirname "$target_file")"
 
     # Copy the file
     cp "$source_file" "$target_file"
-    echo -e "${GREEN}✓ Updated: $rel_path${NC}"
+echo -e "${GREEN}✓ Updated: $rel_path${NC}"
+}
+
+# Helper: create a temp file with '.blueprint-oss' substituted to the detected
+# install dir (e.g., '.my-blueprint') so behavior mirrors setup/functions.sh
+create_temp_with_subst() {
+    local src_file="$1"
+    local tmp_file
+    tmp_file="$(mktemp)"
+    if [[ "$BLUEPRINT_DIR" != ".blueprint-oss" ]]; then
+        # Escape replacement for sed (& and /)
+        local escaped_dir
+        escaped_dir=$(printf '%s' "$BLUEPRINT_DIR" | sed 's/[\/&]/\\&/g')
+        sed "s/\\.blueprint-oss/$escaped_dir/g" "$src_file" > "$tmp_file"
+    else
+        cat "$src_file" > "$tmp_file"
+    fi
+    echo "$tmp_file"
 }
 
 # Collect all files to check
@@ -264,42 +289,39 @@ declare -a modified_files=()
 declare -a unchanged_files=()
 declare -a skipped_files=()
 
-# Define source directories to sync
+# Define source directories to sync into the Blueprint install dir
+# NOTE: We intentionally exclude 'commands' and 'agents' here.
+# Those are handled below in the Integrations section to mirror setup/project.sh behavior.
 SOURCE_DIRS=(
-    "commands"
     "instructions/core"
     "instructions/meta"
     "standards"
-    "agents"
 )
 
-# Add individual files
-SOURCE_FILES=(
-    "config.yml"
-    "CLAUDE.md"
-    "README.md"
-)
+# No top-level files are synced into the Blueprint install dir.
+# Setup only installs directories (instructions/, standards/), so we mirror that here.
+SOURCE_FILES=()
 
 # Check directories
 for dir in "${SOURCE_DIRS[@]}"; do
     if [[ -d "$SCRIPT_DIR/../$dir" ]]; then
         while IFS= read -r -d '' source_file; do
-            # Skip non-markdown and non-yaml files
-            if [[ ! "$source_file" =~ \.(md|yml|yaml)$ ]]; then
-                continue
-            fi
 
             # Calculate relative path
             rel_path="${source_file#$SCRIPT_DIR/../}"
             target_file="$TARGET_DIR/$BLUEPRINT_DIR/$rel_path"
 
+            # Compare after substitution so diffs reflect actual written content
+            tmp_cmp=$(create_temp_with_subst "$source_file")
+            compare_source="$tmp_cmp"
             if [[ ! -f "$target_file" ]]; then
                 new_files+=("$rel_path")
-            elif files_differ "$source_file" "$target_file"; then
+            elif files_differ "$compare_source" "$target_file"; then
                 modified_files+=("$rel_path")
             else
                 unchanged_files+=("$rel_path")
             fi
+            rm -f "$tmp_cmp"
         done < <(find "$SCRIPT_DIR/../$dir" -type f -print0 2>/dev/null)
     fi
 done
@@ -339,7 +361,9 @@ if [[ ${#new_files[@]} -gt 0 ]]; then
         for file in "${new_files[@]}"; do
             source_file="$SCRIPT_DIR/../$file"
             target_file="$TARGET_DIR/$BLUEPRINT_DIR/$file"
-            update_file "$source_file" "$target_file" "$file"
+            tmp_src=$(create_temp_with_subst "$source_file")
+            update_file "$tmp_src" "$target_file" "$file"
+            rm -f "$tmp_src"
         done
     else
         # Ask for each file individually
@@ -348,7 +372,9 @@ if [[ ${#new_files[@]} -gt 0 ]]; then
             target_file="$TARGET_DIR/$BLUEPRINT_DIR/$file"
 
             if prompt_update "$file" "new"; then
-                update_file "$source_file" "$target_file" "$file"
+                tmp_src=$(create_temp_with_subst "$source_file")
+                update_file "$tmp_src" "$target_file" "$file"
+                rm -f "$tmp_src"
             else
                 skipped_files+=("$file")
             fi
@@ -369,48 +395,168 @@ if [[ ${#modified_files[@]} -gt 0 ]]; then
         source_file="$SCRIPT_DIR/../$file"
         target_file="$TARGET_DIR/$BLUEPRINT_DIR/$file"
 
-        show_diff "$source_file" "$target_file"
-
+        tmp_src=$(create_temp_with_subst "$source_file")
+        show_diff "$tmp_src" "$target_file"
         if prompt_update "$file" "modified"; then
-            update_file "$source_file" "$target_file" "$file"
+            update_file "$tmp_src" "$target_file" "$file"
         else
             skipped_files+=("$file")
         fi
+        rm -f "$tmp_src"
     done
     echo
 fi
 
-# Handle special integrations (.claude, .cursor)
+#############################################
+# Handle special integrations (.claude, etc.)
+#############################################
 echo -e "${BLUE}Checking integrations...${NC}"
 
 # Update .claude/CLAUDE.md if it exists
 if [[ -f "$TARGET_DIR/.claude/CLAUDE.md" ]]; then
     source_file="$SCRIPT_DIR/../CLAUDE.md"
     target_file="$TARGET_DIR/.claude/CLAUDE.md"
-
-    if files_differ "$source_file" "$target_file"; then
+    tmp_src=$(create_temp_with_subst "$source_file")
+    if files_differ "$tmp_src" "$target_file"; then
         echo -e "${YELLOW}Found changes in .claude/CLAUDE.md${NC}"
-        show_diff "$source_file" "$target_file"
+        show_diff "$tmp_src" "$target_file"
 
         if prompt_update ".claude/CLAUDE.md" "modified"; then
-            update_file "$source_file" "$target_file" ".claude/CLAUDE.md"
+            update_file "$tmp_src" "$target_file" ".claude/CLAUDE.md"
         fi
     fi
+    rm -f "$tmp_src"
+fi
+
+# Update .claude/commands and .claude/agents if present
+if [[ -d "$TARGET_DIR/.claude" ]]; then
+    echo -e "${BLUE}Updating .claude integrations...${NC}"
+
+    # Uses top-level create_temp_with_subst defined above
+
+    # .claude/commands
+    if [[ -d "$TARGET_DIR/.claude/commands" ]] && [[ -d "$SCRIPT_DIR/../commands" ]]; then
+        echo -e "${BLUE}.claude/commands:${NC}"
+        while IFS= read -r -d '' src; do
+            base="$(basename "$src")"
+            dest="$TARGET_DIR/.claude/commands/$base"
+            tmp=$(create_temp_with_subst "$src")
+
+            if [[ ! -f "$dest" ]]; then
+                if prompt_update ".claude/commands/$base" "new"; then
+                    update_file "$tmp" "$dest" ".claude/commands/$base"
+                fi
+            elif files_differ "$tmp" "$dest"; then
+                show_diff "$tmp" "$dest"
+                if prompt_update ".claude/commands/$base" "modified"; then
+                    update_file "$tmp" "$dest" ".claude/commands/$base"
+                fi
+            fi
+            rm -f "$tmp"
+        done < <(find "$SCRIPT_DIR/../commands" -type f -name "*.md" -print0)
+    fi
+
+    # .claude/agents
+    if [[ -d "$TARGET_DIR/.claude/agents" ]] && [[ -d "$SCRIPT_DIR/../agents" ]]; then
+        echo -e "${BLUE}.claude/agents:${NC}"
+        while IFS= read -r -d '' src; do
+            base="$(basename "$src")"
+            dest="$TARGET_DIR/.claude/agents/$base"
+            tmp=$(create_temp_with_subst "$src")
+
+            if [[ ! -f "$dest" ]]; then
+                if prompt_update ".claude/agents/$base" "new"; then
+                    update_file "$tmp" "$dest" ".claude/agents/$base"
+                fi
+            elif files_differ "$tmp" "$dest"; then
+                show_diff "$tmp" "$dest"
+                if prompt_update ".claude/agents/$base" "modified"; then
+                    update_file "$tmp" "$dest" ".claude/agents/$base"
+                fi
+            fi
+            rm -f "$tmp"
+        done < <(find "$SCRIPT_DIR/../agents" -type f -name "*.md" -print0)
+    fi
+fi
+
+# Update .cursor/rules if present
+if [[ -d "$TARGET_DIR/.cursor/rules" ]] && [[ -d "$SCRIPT_DIR/../commands" ]]; then
+    echo -e "${BLUE}Updating .cursor/rules...${NC}"
+
+    while IFS= read -r -d '' src; do
+        name="$(basename "$src" .md)"
+        dest="$TARGET_DIR/.cursor/rules/${name}.mdc"
+        tmp="$(mktemp)"
+        # Build converted content with front-matter + source
+        {
+            echo "---"
+            echo "alwaysApply: false"
+            echo "---"
+            echo
+            cat "$src"
+        } > "$tmp"
+        # Substitute blueprint dir if customized
+        if [[ "$BLUEPRINT_DIR" != ".blueprint-oss" ]]; then
+            escaped_dir=$(printf '%s' "$BLUEPRINT_DIR" | sed 's/[\/&]/\\&/g')
+            sed -i '' "s/\\.blueprint-oss/$escaped_dir/g" "$tmp" 2>/dev/null || sed -i "s/\\.blueprint-oss/$escaped_dir/g" "$tmp"
+        fi
+
+        if [[ ! -f "$dest" ]]; then
+            if prompt_update ".cursor/rules/${name}.mdc" "new"; then
+                update_file "$tmp" "$dest" ".cursor/rules/${name}.mdc"
+            fi
+        elif files_differ "$tmp" "$dest"; then
+            show_diff "$tmp" "$dest"
+            if prompt_update ".cursor/rules/${name}.mdc" "modified"; then
+                update_file "$tmp" "$dest" ".cursor/rules/${name}.mdc"
+            fi
+        fi
+        rm -f "$tmp"
+    done < <(find "$SCRIPT_DIR/../commands" -type f -name "*.md" -print0)
+fi
+
+# Update Codex prompts in ~/.codex/prompts if present
+if [[ -d "$HOME/.codex/prompts" ]] && [[ -d "$SCRIPT_DIR/../commands" ]]; then
+    echo -e "${BLUE}Updating Codex prompts (~/.codex/prompts)...${NC}"
+    while IFS= read -r -d '' src; do
+        base="$(basename "$src")"
+        dest="$HOME/.codex/prompts/$base"
+        tmp="$(mktemp)"
+        cat "$src" > "$tmp"
+        printf "\n\nIf the file does not exist fail early and let the user know.\n" >> "$tmp"
+        if [[ "$BLUEPRINT_DIR" != ".blueprint-oss" ]]; then
+            escaped_dir=$(printf '%s' "$BLUEPRINT_DIR" | sed 's/[\/&]/\\&/g')
+            sed -i '' "s/\\.blueprint-oss/$escaped_dir/g" "$tmp" 2>/dev/null || sed -i "s/\\.blueprint-oss/$escaped_dir/g" "$tmp"
+        fi
+
+        if [[ ! -f "$dest" ]]; then
+            if prompt_update "~/.codex/prompts/$base" "new"; then
+                update_file "$tmp" "$dest" "~/.codex/prompts/$base"
+            fi
+        elif files_differ "$tmp" "$dest"; then
+            show_diff "$tmp" "$dest"
+            if prompt_update "~/.codex/prompts/$base" "modified"; then
+                update_file "$tmp" "$dest" "~/.codex/prompts/$base"
+            fi
+        fi
+        rm -f "$tmp"
+    done < <(find "$SCRIPT_DIR/../commands" -type f -name "*.md" -print0)
 fi
 
 # Update .cursor/cursorrules if it exists
 if [[ -f "$TARGET_DIR/.cursor/cursorrules" ]]; then
     source_file="$SCRIPT_DIR/../CLAUDE.md"
     target_file="$TARGET_DIR/.cursor/cursorrules"
-
-    if files_differ "$source_file" "$target_file"; then
+    tmp_src=$(create_temp_with_subst "$source_file")
+    if files_differ "$tmp_src" "$target_file"; then
         echo -e "${YELLOW}Found changes in .cursor/cursorrules${NC}"
-        show_diff "$source_file" "$target_file"
+        show_diff "$tmp_src" "$target_file"
 
         if prompt_update ".cursor/cursorrules" "modified"; then
-            update_file "$source_file" "$target_file" ".cursor/cursorrules"
+            update_file "$tmp_src" "$target_file" ".cursor/cursorrules"
         fi
     fi
+    rm -f "$tmp_src"
 fi
 
 # Final summary
@@ -435,4 +581,3 @@ else
 fi
 
 echo
-echo -e "${BLUE}Backup files (if any) have suffix: ${BACKUP_SUFFIX}${NC}"
